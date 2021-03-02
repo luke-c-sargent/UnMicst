@@ -551,6 +551,9 @@ if __name__ == '__main__':
 						default=1)
 	parser.add_argument("--stackOutput", help="save probability maps as separate files", action='store_true')
 	parser.add_argument("--GPU", help="explicitly select GPU", type=int, default = -1)
+	parser.add_argument("--outlier",
+						help="map percentile intensity to max when rescaling intensity values. Max intensity as default",
+						type=float, default=-1)
 	args = parser.parse_args()
 
 	logPath = ''
@@ -599,7 +602,7 @@ if __name__ == '__main__':
 			image = czi.asarray()
 			I = image[0, 0, dapiChannel, 0, 0, :, :, 0]
 	elif fileType == 'nd2':
-		with ND2Reader(iFile) as fullStack:
+		with ND2Reader(imagePath) as fullStack:
 			I = fullStack[dapiChannel]
 
 	if args.classOrder == -1:
@@ -610,7 +613,11 @@ if __name__ == '__main__':
 	hsize = int((float(I.shape[0]) * float(dsFactor)))
 	vsize = int((float(I.shape[1]) * float(dsFactor)))
 	I = resize(I, (hsize, vsize))
-	I = im2double(sk.rescale_intensity(I, in_range=(np.min(I), np.max(I)), out_range=(0, 0.983)))
+	if args.outlier == -1:
+		maxLimit = np.max(I)
+	else:
+		maxLimit = np.percentile(I, args.outlier)
+	I = im2double(sk.rescale_intensity(I, in_range=(np.min(I), maxLimit), out_range=(0, 0.983)))
 	rawI = im2double(rawI) / np.max(im2double(rawI))
 	if not args.outputPath:
 		args.outputPath = parentFolder + '//probability_maps'
@@ -634,13 +641,13 @@ if __name__ == '__main__':
 			PM = np.uint8(255*UNet2D.singleImageInference(I, 'accumulate', iClass)) # backwards in order to align with ilastik...
 			PM = resize(PM, (rawI.shape[0], rawI.shape[1]))
 			if slice==0:
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel + 1) + '.tif', np.uint8(255 * PM),**save_kwargs)
+				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel) + '.tif', np.uint8(255 * PM),**save_kwargs)
 			else:
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel + 1) + '.tif',np.uint8(255 * PM),**append_kwargs)
+				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel) + '.tif',np.uint8(255 * PM),**append_kwargs)
 			if slice==1:
 				save_kwargs['append'] = False
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel + 1) + '.tif',	np.uint8(255 * PM), **save_kwargs)
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel + 1) + '.tif', np.uint8(255 * rawI), **append_kwargs)
+				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel) + '.tif',	np.uint8(255 * PM), **save_kwargs)
+				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel) + '.tif', np.uint8(255 * rawI), **append_kwargs)
 			slice = slice + 1
 
 	else:
@@ -648,12 +655,12 @@ if __name__ == '__main__':
 		hsize = int((float(I.shape[0]) * float(1 / dsFactor)))
 		vsize = int((float(I.shape[1]) * float(1 / dsFactor)))
 		contours = resize(contours, (rawI.shape[0], rawI.shape[1]))
-		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel + 1) + '.tif',np.uint8(255 * contours),**save_kwargs)
-		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel + 1) + '.tif',np.uint8(255 * rawI), **append_kwargs)
+		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel) + '.tif',np.uint8(255 * contours),**save_kwargs)
+		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel) + '.tif',np.uint8(255 * rawI), **append_kwargs)
 		del contours
 		nuclei = np.uint8(255*UNet2D.singleImageInference(I, 'accumulate', args.classOrder[2]))
 		nuclei = resize(nuclei, (rawI.shape[0], rawI.shape[1]))
-		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_NucleiPM_' + str(dapiChannel + 1) + '.tif',np.uint8(255 * nuclei), **save_kwargs)
+		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_NucleiPM_' + str(dapiChannel) + '.tif',np.uint8(255 * nuclei), **save_kwargs)
 		del nuclei
 	UNet2D.singleImageInferenceCleanup()
 
