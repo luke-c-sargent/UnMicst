@@ -1,9 +1,13 @@
 import numpy as np
 from scipy import misc
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import logging
+logging.getLogger('tensorflow').setLevel(logging.FATAL)
 import tensorflow.compat.v1 as tf
 import shutil
 import scipy.io as sio
-import os, fnmatch, glob
+import fnmatch, glob
 import skimage.exposure as sk
 import skimage.io
 import argparse
@@ -590,10 +594,10 @@ if __name__ == '__main__':
 	parentFolder = os.path.dirname(os.path.dirname(imagePath))
 	fileName = os.path.basename(imagePath)
 	fileNamePrefix = fileName.split(os.extsep, 1)
-	print(fileName)
+	# print(fileName)
 	fileType = fileNamePrefix[1]
 
-	if fileType=='ome.tif' or fileType == 'btf' :
+	if fileType=='ome.tif' or fileType=='ome.tiff' or fileType == 'btf' :
 		I = skio.imread(imagePath, img_num=dapiChannel,plugin='tifffile')
 	elif fileType == 'tif' :
 		I = tifffile.imread(imagePath, key=dapiChannel)
@@ -604,12 +608,13 @@ if __name__ == '__main__':
 	elif fileType == 'nd2':
 		with ND2Reader(imagePath) as fullStack:
 			I = fullStack[dapiChannel]
-
+	if I.dtype == 'float32':
+		I=np.uint16(I)
 	if args.classOrder == -1:
 		args.classOrder = range(nClass)
 
 	rawI = I
-	print(type(I))
+	# print(type(I))
 	hsize = int((float(I.shape[0]) * float(dsFactor)))
 	vsize = int((float(I.shape[1]) * float(dsFactor)))
 	I = resize(I, (hsize, vsize))
@@ -624,6 +629,7 @@ if __name__ == '__main__':
 
 	if not os.path.exists(args.outputPath):
 		os.makedirs(args.outputPath)
+	os.makedirs(args.outputPath + '//qc')
 
 	append_kwargs = {
 		'bigtiff': True,
@@ -641,13 +647,13 @@ if __name__ == '__main__':
 			PM = np.uint8(255*UNet2D.singleImageInference(I, 'accumulate', iClass)) # backwards in order to align with ilastik...
 			PM = resize(PM, (rawI.shape[0], rawI.shape[1]))
 			if slice==0:
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel) + '.tif', np.uint8(255 * PM),**save_kwargs)
+				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel+1) + '.tif', np.uint8(255 * PM),**save_kwargs)
 			else:
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel) + '.tif',np.uint8(255 * PM),**append_kwargs)
+				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Probabilities_' + str(dapiChannel+1) + '.tif',np.uint8(255 * PM),**append_kwargs)
 			if slice==1:
 				save_kwargs['append'] = False
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel) + '.tif',	np.uint8(255 * PM), **save_kwargs)
-				skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel) + '.tif', np.uint8(255 * rawI), **append_kwargs)
+				skimage.io.imsave(args.outputPath + '//qc//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel+1) + '.tif',	np.uint8(255 * PM), **save_kwargs)
+				skimage.io.imsave(args.outputPath + '//qc//' + fileNamePrefix[0] + '_Preview_' + str(dapiChannel+1) + '.tif', np.uint8(255 * rawI), **append_kwargs)
 			slice = slice + 1
 
 	else:
@@ -655,20 +661,11 @@ if __name__ == '__main__':
 		hsize = int((float(I.shape[0]) * float(1 / dsFactor)))
 		vsize = int((float(I.shape[1]) * float(1 / dsFactor)))
 		contours = resize(contours, (rawI.shape[0], rawI.shape[1]))
-		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel) + '.tif',np.uint8(255 * contours),**save_kwargs)
-		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel) + '.tif',np.uint8(255 * rawI), **append_kwargs)
+		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel+1) + '.tif',np.uint8(255 * contours),**save_kwargs)
+		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_ContoursPM_' + str(dapiChannel+1) + '.tif',np.uint8(255 * rawI), **append_kwargs)
 		del contours
 		nuclei = np.uint8(255*UNet2D.singleImageInference(I, 'accumulate', args.classOrder[2]))
 		nuclei = resize(nuclei, (rawI.shape[0], rawI.shape[1]))
-		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_NucleiPM_' + str(dapiChannel) + '.tif',np.uint8(255 * nuclei), **save_kwargs)
+		skimage.io.imsave(args.outputPath + '//' + fileNamePrefix[0] + '_NucleiPM_' + str(dapiChannel+1) + '.tif',np.uint8(255 * nuclei), **save_kwargs)
 		del nuclei
 	UNet2D.singleImageInferenceCleanup()
-
-#aligned output files to reflect ilastik
-#outputting all classes as single file
-#handles multiple formats including tif, ome.tif, nd2, czi
-#selectable models (human nuclei, mouse nuclei, cytoplasm)
-
-#added legacy function to save output files
-#append save function to reduce memory footprint
-#added --classOrder parameter to specify which class is background, contours, and nuclei respectively
